@@ -10,10 +10,10 @@ public class DatabaseConnection {
             "jdbc:mysql://localhost:3306/livebid_db";
 
     private static final String USER =
-            "root";
+            "your_user_name";
 
     private static final String PASSWORD =
-            "Root@123";
+            "your_password";
 
     public static Connection getConnection() throws SQLException {
         return DriverManager.getConnection(URL, USER, PASSWORD);
