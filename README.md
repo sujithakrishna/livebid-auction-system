@@ -1,368 +1,698 @@
-# 🔨 LiveBid — Online Auction System
+# 🔨 LiveBid — Concurrent Live Auction System
 
-<p align="center">
-  <strong>A Java-based online auction backend with secure authentication, competitive bidding, automatic bidding, and real-time auction lifecycle management.</strong>
-</p>
+> **A Java + MySQL live auction system focused on concurrent bidding, optimistic locking, database consistency, and layered backend design.**
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Java-21-orange?style=for-the-badge&logo=openjdk" alt="Java 21" />
-  <img src="https://img.shields.io/badge/Spring%20Boot-Backend-6DB33F?style=for-the-badge&logo=springboot&logoColor=white" alt="Spring Boot" />
-  <img src="https://img.shields.io/badge/MySQL-Database-4479A1?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL" />
-  <img src="https://img.shields.io/badge/Security-JWT-black?style=for-the-badge&logo=jsonwebtokens" alt="JWT" />
-  <img src="https://img.shields.io/badge/API-REST-009688?style=for-the-badge" alt="REST API" />
-</p>
-
-<p align="center">
-  <a href="#-overview">Overview</a> •
-  <a href="#-features">Features</a> •
-  <a href="#-architecture">Architecture</a> •
-  <a href="#-api-reference">API Reference</a> •
-  <a href="#-getting-started">Getting Started</a> •
-  <a href="#-testing">Testing</a>
-</p>
+![Java](https://img.shields.io/badge/Java-21-orange?style=for-the-badge&logo=openjdk)
+![MySQL](https://img.shields.io/badge/MySQL-8.0%2B-blue?style=for-the-badge&logo=mysql)
+![JDBC](https://img.shields.io/badge/JDBC-Database%20Connectivity-green?style=for-the-badge)
+![Maven](https://img.shields.io/badge/Maven-Build%20Tool-red?style=for-the-badge&logo=apachemaven)
+![Concurrency](https://img.shields.io/badge/Concurrency-Optimistic%20Locking-purple?style=for-the-badge)
 
 ---
 
 ## 📌 Overview
 
-**LiveBid** is a backend application for managing online auctions. It provides authenticated users with APIs to browse auctions, place bids, configure automatic bidding, and retrieve notifications.
+**LiveBid** is a Java and MySQL based live auction system designed to model a backend auction workflow where multiple users can participate in the same auction and place bids concurrently.
 
-The system also handles auction lifecycle transitions and uses optimistic locking to help prevent conflicting updates during concurrent bidding.
+The main technical focus is **concurrency control**. When multiple bidders attempt to update the same auction at nearly the same time, the system uses **optimistic locking with version checking** to detect conflicting updates instead of allowing one update to silently overwrite another.
 
-### 🎯 Project Objectives
+The project uses a layered structure consisting of models, services, DAOs, JDBC database connectivity, custom exception handling, and MySQL persistence.
 
-- Build a structured Java backend for an online auction platform.
-- Implement secure, token-based authentication.
-- Maintain bid consistency when multiple users compete.
-- Automate bidding within user-defined limits.
-- Manage auction closure and winner notifications.
+---
 
-## ✨ Features
+## 🎯 Project Objectives
 
-<details>
-<summary><strong>🔐 Authentication and Security</strong></summary>
+- Build a structured Java backend application using a layered architecture
+- Persist auction, bid, user, and notification data in MySQL
+- Connect Java application logic to MySQL using JDBC
+- Implement auction creation and bidding workflows
+- Validate bids against the current highest bid
+- Handle multiple bidders attempting to update the same auction
+- Demonstrate optimistic locking and version-based conflict detection
+- Handle concurrent update conflicts through retry logic
+- Maintain consistent auction state
 
-- User registration and login APIs.
-- JWT-based authentication for protected endpoints.
-- Password hashing using BCrypt.
-- Authenticated requests for user-specific operations.
+---
 
-</details>
+# ✨ Key Features
 
-<details>
-<summary><strong>🔨 Auction Management</strong></summary>
+### 👤 User Management
 
-- Retrieve the list of auctions.
-- Retrieve an individual auction by ID.
-- Create auctions.
-- Track the auction's current highest bid and bidder.
-- Manage scheduled, live, and closed auction states.
+- User creation and retrieval
+- User association with bids and auction activity
 
-</details>
+### 🔨 Auction Management
 
-<details>
-<summary><strong>💰 Bidding and Concurrency</strong></summary>
+- Create auctions
+- Store auction details
+- Define starting price
+- Track current highest bid
+- Maintain auction status
+- Maintain auction version
+- Retrieve auction information
 
-- Submit bids against an auction.
-- Retrieve an auction's bid history.
-- Track the highest bid.
-- Use optimistic locking to detect conflicting concurrent updates.
+### 💰 Bidding
 
-**Why concurrency matters:** When multiple users attempt to bid simultaneously, the backend must protect the auction's current state from conflicting updates.
+- Place bids
+- Validate bid amounts
+- Compare bids with the current highest bid
+- Update the highest bid
+- Persist bid history
+- Associate bids with users and auctions
 
-</details>
+### ⚡ Concurrent Bidding
 
-<details>
-<summary><strong>🤖 Automatic Bidding</strong></summary>
+Multiple bidders can attempt to place bids against the same auction.
 
-- Configure an automatic bidding limit.
-- Allow the system to submit eligible bids on behalf of a user.
-- Deactivate a user's automatic bidding configuration.
-- Track whether a bid was placed manually or automatically.
+The system detects conflicting updates using optimistic locking rather than allowing stale requests to overwrite newer auction state.
 
-</details>
+### 🔐 Optimistic Locking
 
-<details>
-<summary><strong>🔔 Notifications and Auction Lifecycle</strong></summary>
+Each auction maintains a version value.
 
-- Retrieve notifications for the authenticated user.
-- Generate outbid notifications.
-- Notify the winning bidder when an auction closes.
-- Periodically evaluate scheduled and live auctions.
+Example:
 
-</details>
+```text
+Auction ID       : 1
+Current Bid      : ₹25,000
+Version          : 1
+Status           : LIVE
+```
 
-## 🏗️ Architecture
+If another bidder updates the auction before a previous bidder completes its update:
+
+```text
+Expected Version : 1
+Database Version : 2
+```
+
+the stale update is rejected as a conflict instead of silently overwriting the newer state.
+
+### 🔔 Notifications
+
+The system maintains notification records associated with users and auctions, providing a foundation for future real-time or external notification mechanisms.
+
+---
+
+# 🏗️ Architecture
+
+LiveBid follows a layered backend architecture:
 
 ```mermaid
 flowchart TD
-    A[Client / Postman] --> B[REST API]
-    B --> C[JWT Authentication]
-    C --> D[Spring Boot Controllers]
-    D --> E[Business Services]
-    E --> F[Auction Management]
-    E --> G[Bidding and Auto-Bidding]
-    E --> H[Notification Management]
-    F --> I[(MySQL Database)]
-    G --> I
-    H --> I
-    J[Scheduled Auction Lifecycle] --> E
+    A[Main Application] --> B[Service Layer]
+
+    B --> B1[AuctionService]
+    B --> B2[BidService]
+    B --> B3[UserService]
+    B --> B4[NotificationService]
+
+    B1 --> C[AuctionDAO]
+    B2 --> D[BidDAO]
+    B3 --> E[UserDAO]
+    B4 --> F[NotificationDAO]
+
+    C --> G[JDBC]
+    D --> G
+    E --> G
+    F --> G
+
+    G --> H[(MySQL Database)]
 ```
 
-### Technology Stack
+### Layer Responsibilities
+
+| Layer | Responsibility |
+|---|---|
+| **Model** | Represents domain entities and application data |
+| **Service** | Contains business logic and coordinates operations |
+| **DAO** | Handles database operations using JDBC |
+| **Config** | Provides database connection configuration |
+| **Exception** | Handles application-specific exceptions |
+| **MySQL** | Provides persistent data storage |
+
+---
+
+# 📂 Project Structure
+
+```text
+livebid/
+│
+├── src/
+│   └── main/
+│       └── java/
+│           └── com/
+│               └── sujitha/
+│                   └── livebid/
+│
+│                       ├── Main.java
+│                       │
+│                       ├── config/
+│                       │   └── DatabaseConnection.java
+│                       │
+│                       ├── dao/
+│                       │   ├── AuctionDAO.java
+│                       │   ├── BidDAO.java
+│                       │   ├── NotificationDAO.java
+│                       │   └── UserDAO.java
+│                       │
+│                       ├── exception/
+│                       │   └── OptimisticLockException.java
+│                       │
+│                       ├── model/
+│                       │   ├── Auction.java
+│                       │   ├── AuctionStatus.java
+│                       │   ├── Bid.java
+│                       │   ├── Notification.java
+│                       │   └── User.java
+│                       │
+│                       └── service/
+│                           ├── AuctionService.java
+│                           ├── BidService.java
+│                           ├── NotificationService.java
+│                           └── UserService.java
+│
+├── pom.xml
+├── .gitignore
+└── README.md
+```
+
+---
+
+# 🧩 Core Components
+
+## Model Layer
+
+### `Auction`
+
+Represents an auction and its current state, including:
+
+- Auction ID
+- Item/product information
+- Starting price
+- Current highest bid
+- Auction status
+- Version used for optimistic locking
+
+### `Bid`
+
+Represents an individual bid placed by a user for an auction.
+
+### `User`
+
+Represents a participant in the auction system.
+
+### `Notification`
+
+Represents a persisted notification associated with auction activity.
+
+### `AuctionStatus`
+
+Represents the lifecycle state of an auction.
+
+---
+
+## DAO Layer
+
+The DAO layer separates database operations from business logic.
+
+### `AuctionDAO`
+
+Responsible for auction persistence and version-aware auction updates.
+
+### `BidDAO`
+
+Responsible for bid persistence and bid-related database operations.
+
+### `UserDAO`
+
+Responsible for user persistence and retrieval.
+
+### `NotificationDAO`
+
+Responsible for notification persistence and retrieval.
+
+This separation keeps SQL/JDBC operations outside the service layer and improves maintainability.
+
+---
+
+## Service Layer
+
+### `AuctionService`
+
+Handles auction-related business operations such as:
+
+- Auction creation
+- Auction retrieval
+- Auction state management
+
+### `BidService`
+
+Contains the core bidding logic:
+
+```text
+Receive Bid
+    ↓
+Validate Bid
+    ↓
+Read Current Auction State
+    ↓
+Check Highest Bid
+    ↓
+Read Auction Version
+    ↓
+Attempt Version-Aware Update
+    ↓
+Update Successful?
+   /             \
+ YES              NO
+  |                |
+  ▼                ▼
+Accept Bid     Optimistic Lock
+                  Conflict
+                     |
+                     ▼
+               Retry / Handle
+```
+
+### `UserService`
+
+Handles user-related business operations.
+
+### `NotificationService`
+
+Handles notification-related business operations.
+
+---
+
+# ⚡ Concurrency Design
+
+Concurrency is the primary technical focus of LiveBid.
+
+Consider an auction with:
+
+```text
+Current Highest Bid = ₹25,000
+Version             = 1
+```
+
+Two bidders attempt to place bids at approximately the same time:
+
+```text
+Bidder #2 → ₹27,000
+Bidder #3 → ₹28,000
+```
+
+Both operations may initially read the same auction version.
+
+The system uses the auction version to detect whether the auction has changed between reading and updating.
+
+Conceptually, the database update follows this pattern:
+
+```sql
+UPDATE auction
+SET highest_bid = ?,
+    version = version + 1
+WHERE id = ?
+  AND version = ?;
+```
+
+If the expected version no longer matches the database version, the update is considered a conflict.
+
+This prevents a stale transaction from blindly overwriting a newer auction state.
+
+---
+
+# 🔐 Optimistic Locking Flow
+
+```text
+              Read Auction
+                   │
+                   ▼
+          Read Current Version
+                   │
+                   ▼
+             Validate Bid
+                   │
+                   ▼
+        Attempt Database Update
+                   │
+             ┌─────┴─────┐
+             │           │
+          Success      Conflict
+             │           │
+             ▼           ▼
+        Bid Accepted   Version Mismatch
+                         │
+                         ▼
+                 OptimisticLockException
+                         │
+                         ▼
+                   Retry / Handle
+```
+
+The project contains a custom:
+
+```text
+OptimisticLockException
+```
+
+to represent optimistic-lock conflicts explicitly.
+
+---
+
+# 🧪 Concurrency Testing
+
+The system was tested using concurrent bidding scenarios.
+
+Example:
+
+```text
+Auction:
+Sony WH-1000XM5 Headphones
+
+Starting Price:
+₹25,000
+
+Concurrent Bidders:
+Bidder #2
+Bidder #3
+```
+
+A representative execution flow is:
+
+```text
+Auction Created
+      ↓
+Version = 1
+      ↓
+Bidder #2 and Bidder #3 attempt bids
+      ↓
+One transaction successfully updates the auction
+      ↓
+Auction version increments
+      ↓
+The competing transaction detects a version mismatch
+      ↓
+Optimistic lock conflict is detected
+      ↓
+Retry / conflict handling is performed
+```
+
+This demonstrates how optimistic locking can protect shared auction state when multiple users compete for the same resource.
+
+---
+
+# 🗃️ Database Design
+
+MySQL is used for persistent storage.
+
+The application contains data associated with:
+
+```text
+Users
+Auctions
+Bids
+Notifications
+```
+
+The Java application communicates with MySQL through JDBC.
+
+Database connectivity is centralized through:
+
+```text
+src/main/java/com/sujitha/livebid/config/DatabaseConnection.java
+```
+
+The DAO classes use the database connection to execute SQL operations.
+
+---
+
+# 🛠️ Technology Stack
 
 | Technology | Purpose |
 |---|---|
-| Java 21 | Core programming language |
-| Spring Boot | Backend application framework |
-| Spring Security | Endpoint protection |
-| JWT | Token-based authentication |
-| BCrypt | Password hashing |
-| MySQL | Relational database |
-| Spring Data JPA | Database persistence |
-| JDBC | Database access where implemented |
-| Postman | API testing |
-| IntelliJ IDEA | Development environment |
+| **Java 21** | Core application and business logic |
+| **MySQL** | Relational database |
+| **JDBC** | Database connectivity |
+| **Maven** | Build and dependency management |
+| **IntelliJ IDEA** | Development environment |
+| **Git** | Version control |
+| **GitHub** | Source code hosting |
 
-## 🔄 How Bidding Works
+---
 
-```mermaid
-sequenceDiagram
-    actor Bidder
-    participant API as LiveBid API
-    participant Service as Bidding Service
-    participant DB as MySQL
+# 📋 Prerequisites
 
-    Bidder->>API: Submit bid
-    API->>Service: Validate request
-    Service->>DB: Read auction and current version
-    Service->>Service: Validate bid and auction state
-    Service->>DB: Persist bid and update auction
-    alt Update succeeds
-        DB-->>Service: Update committed
-        Service-->>API: Bid result
-        API-->>Bidder: Success response
-    else Concurrent update conflict
-        DB-->>Service: Version conflict
-        Service-->>API: Conflict handling result
-        API-->>Bidder: Failure or retry result
-    end
-```
+Install the following before running the project:
 
-*The diagram illustrates the intended bidding flow. Exact retry behavior and transaction boundaries depend on the implementation.*
-
-## 🔌 API Reference
-
-**Base URL:** `http://localhost:8080`
-
-### Authentication
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `POST` | `/api/auth/register` | Register a user |
-| `POST` | `/api/auth/login` | Authenticate a user |
-
-### Auctions and Bids
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/auctions` | List auctions |
-| `GET` | `/api/auctions/{id}` | Get auction details |
-| `POST` | `/api/auctions` | Create an auction |
-| `POST` | `/api/auctions/{auctionId}/bids` | Place a bid |
-| `GET` | `/api/auctions/{auctionId}/bids` | Retrieve bid history |
-
-### Automatic Bidding
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `POST` | `/api/auctions/{auctionId}/auto-bid` | Configure automatic bidding |
-| `DELETE` | `/api/auctions/{auctionId}/auto-bid` | Deactivate automatic bidding |
-
-### Notifications
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/api/users/me/notifications` | Retrieve notifications for the authenticated user |
-
-<details>
-<summary><strong>📨 Example: Place a Bid</strong></summary>
-
-**Request**
-
-```http
-POST /api/auctions/9/bids
-Authorization: Bearer YOUR_JWT_TOKEN
-Content-Type: application/json
-```
-
-Use the bid request JSON expected by your application's request DTO.
-
-**Expected workflow**
-
-1. Authenticate and obtain a JWT.
-2. Select an auction that is accepting bids.
-3. Submit a valid bid using the authenticated user's token.
-4. Verify the result using the auction details and bid-history endpoints.
-
-</details>
-
-<details>
-<summary><strong>🤖 Example: Configure Automatic Bidding</strong></summary>
-
-**Request**
-
-```http
-POST /api/auctions/9/auto-bid
-Authorization: Bearer YOUR_JWT_TOKEN
-Content-Type: application/json
-```
-
-**Request body**
-
-```json
-{
-  "maxAmount": 4000.00
-}
-```
-
-The maximum amount represents the user's configured automatic bidding limit. The actual bidding rules depend on the auction and service implementation.
-
-</details>
-
-<details>
-<summary><strong>🔔 Example: Retrieve Notifications</strong></summary>
-
-**Request**
-
-```http
-GET /api/users/me/notifications
-Authorization: Bearer YOUR_JWT_TOKEN
-```
-
-The endpoint retrieves notifications for the authenticated user rather than accepting an arbitrary user ID in the URL.
-
-</details>
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Java Development Kit (JDK) 21
+- JDK 21 or compatible JDK
 - MySQL Server
-- IntelliJ IDEA or another Java IDE
+- MySQL Workbench or MySQL client
+- Maven
 - Git
-- Postman (for API testing)
+- IntelliJ IDEA or another Java IDE
 
-### 1. Clone the Repository
+---
+
+# 🚀 How to Run
+
+## 1. Clone the Repository
 
 ```bash
 git clone https://github.com/sujithakrishna/livebid-auction-system.git
 cd livebid-auction-system
 ```
 
-### 2. Create the Database
+## 2. Create the MySQL Database
 
-Open MySQL Workbench or your MySQL client and execute:
+Create the required MySQL database and tables according to the schema expected by the application.
 
-```sql
-CREATE DATABASE livebid_db;
-```
+Make sure the MySQL server is running before starting the Java application.
 
-Ensure the database tables are created using the project's entity mappings or database initialization configuration.
+## 3. Configure Database Credentials
 
-### 3. Configure Database Credentials
-
-Update the database configuration in your application's configuration file.
-
-Example for `application.properties`:
-
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/livebid_db
-spring.datasource.username=${DB_USERNAME}
-spring.datasource.password=${DB_PASSWORD}
-```
-
-Configure the remaining application properties according to your project.
-
-**Security:** Keep database credentials, JWT secrets, and other private configuration out of GitHub. Use environment variables or a local, Git-ignored configuration file.
-
-### 4. Run the Application
-
-Open the project in your IDE, ensure the required dependencies are resolved, and run the Spring Boot application.
-
-The default local API base URL is:
+Open:
 
 ```text
-http://localhost:8080
+src/main/java/com/sujitha/livebid/config/DatabaseConnection.java
 ```
 
-### 5. Test Using Postman
-
-1. Register a user.
-2. Log in and obtain a JWT.
-3. Add the token as a Bearer Token for protected endpoints.
-4. Create or select an auction.
-5. Place bids and inspect the bid history.
-6. Test automatic bidding and notifications.
-
-## 🧪 Testing Checklist
-
-Use this checklist as a guide when verifying the application.
-
-- [ ] User registration and login
-- [ ] JWT authentication for protected endpoints
-- [ ] Auction creation and retrieval
-- [ ] Valid and invalid bid requests
-- [ ] Bid history retrieval
-- [ ] Concurrent bidding and optimistic-lock conflict handling
-- [ ] Automatic bidding within the configured limit
-- [ ] Automatic bidding deactivation and ownership validation
-- [ ] User-specific notification retrieval
-- [ ] Scheduled auction transitions and winner notifications
-
-## 📂 Project Structure
-
-The project follows a Spring Boot application structure. The exact package and class names should be verified against the repository.
+Configure:
 
 ```text
-livebid-auction-system/
-├── src/
-│   ├── main/
-│   │   ├── java/
-│   │   │   └── com/sujitha/livebidspringboot/
-│   │   └── resources/
-│   └── test/
-├── pom.xml
-└── README.md
+Database URL
+Username
+Password
 ```
 
-## 💡 Engineering Highlights
+**Do not commit real passwords or other credentials to GitHub.**
 
-- **Concurrency control:** Optimistic locking helps detect competing updates to an auction.
-- **Authentication:** JWT provides an authenticated identity for protected API requests.
-- **Automated workflows:** Scheduled processing manages auction state transitions.
-- **Automated bidding:** User-defined limits support automatic bid placement.
-- **Data isolation:** The notification API scopes results to the authenticated user.
+For production applications, credentials should be supplied through environment variables or external configuration.
 
-## 🛣️ Future Improvements
+## 4. Build the Project
 
-- Add a dedicated automated test suite for bidding and concurrency.
-- Add integration tests for authentication, authorization, and auction lifecycle transitions.
-- Document request and response schemas for every endpoint.
-- Add API documentation using OpenAPI/Swagger if configured.
-- Add deployment instructions and production monitoring.
-- Add a frontend for bidders and auction administrators.
+From the project root:
 
-## 👩‍💻 Author
+```bash
+mvn clean package
+```
+
+## 5. Run the Application
+
+Run:
+
+```text
+src/main/java/com/sujitha/livebid/Main.java
+```
+
+from IntelliJ IDEA or your preferred Java environment.
+
+---
+
+# 🔄 Application Workflow
+
+```text
+User
+  │
+  ▼
+Create / Access Auction
+  │
+  ▼
+Auction Status = LIVE
+  │
+  ▼
+Place Bid
+  │
+  ▼
+Validate Bid
+  │
+  ▼
+Read Current Auction State
+  │
+  ▼
+Validate Version
+  │
+  ├───────────────┐
+  │               │
+  ▼               ▼
+Valid           Conflict
+  │               │
+  ▼               ▼
+Update        Retry / Handle
+Auction
+  │
+  ▼
+Increment Version
+  │
+  ▼
+Persist Bid
+  │
+  ▼
+Create Notification
+```
+
+---
+
+# 📊 Example Scenario
+
+An auction starts with:
+
+```text
+Product          : Sony WH-1000XM5 Headphones
+Starting Price   : ₹25,000
+Status           : LIVE
+Version          : 1
+```
+
+A bidder places:
+
+```text
+Bid = ₹27,000
+```
+
+If the version is still valid:
+
+```text
+Highest Bid → ₹27,000
+Version     → 2
+```
+
+If another bidder has already updated the auction:
+
+```text
+Expected Version → 1
+Actual Version   → 2
+```
+
+the stale update is rejected as a concurrency conflict rather than overwriting the latest auction state.
+
+---
+
+# 💡 Why Optimistic Locking?
+
+Optimistic locking is useful when conflicts are possible but continuous database locking is undesirable.
+
+Instead of locking the auction row for the entire bidding operation, the application assumes that conflicts can occur and verifies the version at update time.
+
+This provides:
+
+- Conflict detection
+- Protection against lost updates
+- Better concurrency
+- Explicit handling of stale data
+- A foundation for scalable concurrent operations
+
+---
+
+# 📈 Future Enhancements
+
+The current Java + MySQL implementation can be extended with:
+
+- REST APIs
+- WebSocket-based real-time bidding
+- Authentication and authorization
+- JWT security
+- Redis caching
+- Message queues
+- Real-time notifications
+- Auction scheduling
+- Automatic auction closing
+- Bid history dashboards
+- Email notifications
+- Distributed locking
+- Docker deployment
+- Cloud deployment
+- Centralized logging
+- Monitoring and observability
+- Automated tests
+
+> These are future extensions and are not part of the current Java + MySQL implementation.
+
+---
+
+# 🎓 What This Project Demonstrates
+
+LiveBid demonstrates practical understanding of:
+
+- Core Java
+- Object-Oriented Programming
+- Exception handling
+- JDBC
+- MySQL
+- SQL-based persistence
+- DAO pattern
+- Service-layer architecture
+- Separation of concerns
+- Concurrent programming concepts
+- Optimistic locking
+- Version-based conflict detection
+- Retry mechanisms
+- Transaction consistency
+- Shared-state concurrency
+- Git and GitHub
+
+---
+
+# ⭐ Project Highlights
+
+| Area | Implementation |
+|---|---|
+| **Language** | Java |
+| **Database** | MySQL |
+| **Connectivity** | JDBC |
+| **Architecture** | Model + Service + DAO |
+| **Concurrency** | Optimistic locking |
+| **Conflict handling** | Version checking + retry flow |
+| **Persistence** | MySQL |
+| **Build** | Maven |
+| **Version Control** | Git |
+| **Repository** | GitHub |
+
+---
+
+# 👩‍💻 Author
 
 **Sujitha V K**
 
-- GitHub: [@sujithakrishna](https://github.com/sujithakrishna)
-- LinkedIn: [Connect on LinkedIn](https://www.linkedin.com/in/sujitha-v-k-77a924258/)
+Java • SQL • Backend Development
+
+**GitHub:**  
+https://github.com/sujithakrishna
+
+**LinkedIn:**  
+https://www.linkedin.com/in/sujitha-v-k-77a924258/
+
+---
+
+# 🔗 Repository
+
+**LiveBid — Concurrent Live Auction System**
+
+https://github.com/sujithakrishna/livebid-auction-system
 
 ---
 
 <p align="center">
-  <strong>LiveBid — Building reliable bidding workflows with Java.</strong>
+  <strong>Built with Java ☕ • MySQL 🗄️ • JDBC 🔌 • Concurrency ⚡</strong>
 </p>
